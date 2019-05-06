@@ -1,0 +1,184 @@
+---
+title: "Exploring spotify API with The Beatles"
+output: github_document
+---
+
+```{r setup, include=FALSE}   
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rvest)
+library(ggplot2)
+library(ggridges)
+library(purrr)
+library(knitr)
+source("../function/multiplot.R")
+```
+
+
+```{r message = FALSE}
+beatles <- read_csv("../data/beatles.csv")
+
+john_lennon <- read_csv("../data/john_lennon.csv") 
+
+paul_mc <- read_csv("../data/paul_mc.csv")
+```
+
+I thought data at Spotify API looked fun and wanted to explore a bit. I fetched the data through `spotifyr` package. I thought about which artist's data to look at and first artist that popped into my head was The Beatles. While I listen to their songs occassionally, I am not a beatles fanatic but there's so much information about them on the web that thought I could throw some interesting questions.
+
+Spotify data contains some very interesting features. You can find features such as `danceability`, `track popularity`,
+
+Description of the track features can be found at: https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/
+
+An Interesting variable is valence: A measure from 0.0 to 1.0 describing the musical positiveness conveyed by a track. Tracks with high valence sound more positive (e.g. happy, cheerful, euphoric), while tracks with low valence sound more negative (e.g. sad, depressed, angry).
+
+Its interesting because happiness is a subjective feeling. Let's see how it is described numerically. 
+
+## Exploring Features
+
+```{r}
+beatles = mutate(beatles, album_name = gsub("\\s*\\([^\\)]+\\)","",beatles$album_name))
+
+detect_song <- function(song) {
+  beatles[str_detect(beatles$track_name, regex(song, ignore_case = TRUE)) == 1,] 
+}
+
+map_df(c("twist and shout", "ob-la-di", "yesterday", "blackbird", "can't buy me love", "I Will"), detect_song) %>%
+  dplyr::select(track_name,danceability, valence, energy, acousticness, loudness, instrumentalness, tempo) %>%
+  knitr::kable()
+```
+So I selected few songs that I was curious to see. 
+
+* _twist and shout_ - very cheerful danceable song in my opinion? - very high valence, nearly one
+* _Ob-La-Di, Ob-La-Da_ - also with a pretty happy beat - very higy danceability and valence
+* _Yesterday_ - kind of a sad moody song and we can see that the valence is on the lower side.
+* _Blackbird_ - slow but encouraging song in my opinion but pretty low in valence and energy but actually pretty high in danceability.
+* _Can't buy me love_ - surprisingly black bird is more danceable but much high in energy. I  put in this song becuase it's a upbeat song but not a "happy" song. It's not the highest in valence but not low either.
+* _I will_ - This song is not upbeat but a "happy" song. We can see that the energy is in the lower side but valence is high.
+
+General notes
+* acousticness to me seems just how much acoustic guitar is used?
+* instrumentalness - Predicts whether a track contains no vocals. so makes sense that they are low
+
+Overall, I think valence is doing a pretty good job on picking up "happiness" of a song. I am impressed!
+
+## Let's graph it
+
+```{r message = FALSE}
+ordered_albums = factor(beatles$album_name)
+ordered_albums = factor(ordered_albums,levels(ordered_albums)[c(7,12,1,3,4,9,8,10,6,11,13,2,5)])
+beatles$album_name = ordered_albums
+
+album_plot <- function(df, feature) {
+
+  feature = quo(!! sym(feature))
+   
+    df %>%
+    ggplot(aes(x = (!!feature), y = album_name, fill = ..x..)) + 
+    geom_density_ridges_gradient(scale = 0.9) + 
+    scale_fill_gradient(low = "white", high = "dark green") +
+    theme(panel.background = element_rect(fill = "white")) +
+    theme(plot.background = element_rect(fill = "white")) +
+    xlim(0,1) +
+    theme(legend.position = "none")+
+  theme(axis.title.y=element_blank(),
+        axis.text.y = element_text(size = 6))
+}
+
+plot_features <- function(df) {
+  
+  names = df[,c(9, 10, 14:18)] %>% colnames()
+  
+  plots = list() 
+  
+  for (i in 1:length(names)){
+  
+  p = album_plot(df, names[i])
+  plots[[i]] <- p
+  }
+
+  for (i in c(1,3,5,7)){
+  multiplot(plotlist = plots[i:(i+1)], cols = 2)
+  }
+ 
+}
+
+plot_features(beatles)
+
+
+```
+
+Here, you can see ridges density graphs with albums ordered by their realease date, with lowest being the oldest. There are some noticeable changes.
+* They had higher valence (positivity) in their earlier albums.
+
+* The album 'Yellow Submarine' seems to stand out compared to the rest of their albums. Its distribution in most of the features such as danceability, instrumentalness, speechiness, acousticness. It makes sense as part of the album is written by The Beatles and the remainder of the album is a re-recording of the film's orchestral soundtrack by the band's producer, George Martin.[https://en.wikipedia.org/wiki/Yellow_Submarine_(album)]
+
+* When making this graph, I was wondering if the values pick up The Beatles psychedelic phase. They say that The Beatles's psychedelic songs are spread across few albums but people say it started from the album 'Revolver' and went on to 'Sgt. Pepper's Lonely Hearts Club Band', Magical Mystery Tour, and 'Yellow Submarine. You can see definite shift in valence as mentioned above after Revolver and also slightly in danceability and acousticness.
+https://ultimateclassicrock.com/beatles-psychedelic-songs/
+
+Let's explore the relationship between these features through a correlation plot.
+
+```{r}
+beatles[,c(9, 10, 12, 14:19, 23)] %>%
+  cor() %>%
+  corrplot::corrplot(method = "circle", order = "AOE")
+```
+
+So for The beatles, energy has positive correlation with acousticness and negative relationship with valence. Also, we can see that "louder" the song is it leads to the song having low energy but high acousticness. Surprisingly danceability has an inverse relationship with valence. I also threw in the track_popularity but none of the variables seem to have a strong linear relationship with popularity. Perhaps, instrumentalness and speechiness have slightly negative relationship with popularity.
+
+## Q. Do features have (linear) relationship with popularity?
+
+
+```{r}
+mean_beatles <- beatles %>%
+  group_by(album_name, album_release_date) %>% 
+  summarise(mean_valence = mean(valence),
+            mean_energy = mean(energy),
+            mean_danceability = mean(danceability),
+            mean_album_popularity = mean(album_popularity)
+            ) %>%
+  arrange(album_release_date)
+
+# album popularity
+mean_beatles %>%
+  arrange(desc(mean_album_popularity)) %>%
+  kable() 
+```
+
+We can see that the more popular albums have mean valence values in the 0.45 - 0.78 range and have mean energy and danceability around 0.5.
+
+I tried making linear regression models to explain track_popularity with the variables in the dataset. 
+
+```{r}
+beatles_top <- beatles %>% 
+  top_n(n = 15, wt = track_popularity) %>%
+  arrange(desc(track_popularity))
+
+beatles_popu_lm <-  lm(track_popularity ~ danceability + energy + loudness + mode + speechiness + acousticness + instrumentalness + liveness + valence + tempo + duration_ms + time_signature, data = beatles)
+beatles_popu_lm %>% 
+  broom::tidy() %>%
+  knitr::kable(digits = 3) 
+
+beatles_popu_lm %>% 
+  broom::glance() %>%
+  knitr::kable() 
+```
+
+Based on this first model, I will remove danceability, modeminor, valence, tempo, and duration_ms.
+
+```{r}
+beatles_popu_lm2 <-  lm(track_popularity ~ energy + loudness + speechiness + acousticness + instrumentalness + liveness + time_signature, data = beatles)
+beatles_popu_lm2 %>% 
+  broom::tidy() %>%
+  knitr::kable(digits = 3) 
+
+beatles_popu_lm2 %>% 
+  broom::glance() %>%
+  knitr::kable() 
+```
+
+Surprisingly speechiness has a p-value of 0 with a relatively large coefficient. Speechiness detects the presence of spoken words in a track (Values above 0.66 describe tracks that are probably made entirely of spoken words.). It makes sense that more speech-like the track is, it won't be so popular. 
+
+It is also interesting to see that The Beatles's track popularity had negative relationship with energy, acousticness, instrumentalness, and liveness. 
+
+But this is just looking at the linear relationship between the features and popularity. As the most popular album had values of some features around 0.5, maybe if we try modeling with non-linear models like trees it will fit our data better.  
+ 
