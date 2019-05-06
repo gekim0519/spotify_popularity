@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1557158095684.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "823E42C",
+    "lastKnownWriteTime" : 1557158677,
+    "last_content_update" : 1557158677169,
+    "path" : "~/Desktop/study/spotify_popularity/beatles_explore/beatles_spotify.Rmd",
+    "project_path" : "beatles_explore/beatles_spotify.Rmd",
+    "properties" : {
+        "cursorPosition" : "12,14",
+        "scrollLine" : "18"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}
